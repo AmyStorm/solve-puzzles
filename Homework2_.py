@@ -1,3 +1,4 @@
+import sys
 from collections import Counter
 import numpy as np
 import os
@@ -13,6 +14,8 @@ from torch_tree_nn import TorchTreeNN
 import sst
 import utils
 
+f = open('homework2_print.txt', 'w+')
+sys.stdout = f
 SST_HOME = os.path.join('data', 'sentiment')
 sst_train = sst.train_reader(SST_HOME)
 sst_dev = sst.dev_reader(SST_HOME)
@@ -199,4 +202,5 @@ if __name__ == '__main__':
     if 'IS_GRADESCOPE_ENV' not in os.environ:
         pass
         create_bakeoff_submission(predict_one_softmax)
+        f.close()
 
