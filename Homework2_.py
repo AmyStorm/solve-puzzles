@@ -176,7 +176,7 @@ def myownpredict():
         sst_train,
         bert_classifier_phi,
         fit_optimized_hf_bert_classifier,
-        assess_dataframes=sst_dev,
+        assess_dataframes=bakeoff_dev,
         score_func=utils.safe_macro_f1,
         verbose=True)  # Pass in the BERT hidden state directly!
 
