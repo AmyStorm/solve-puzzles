@@ -106,7 +106,7 @@ def create_bakeoff_submission(
     df = pd.concat((bakeoff_test, sst_test))
 
     df['prediction'] = df['sentence'].apply(predict_one_func)
-
+    print('output finished')
     df.to_csv(output_filename, index=None)
 
 
