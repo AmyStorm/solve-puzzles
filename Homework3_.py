@@ -471,7 +471,7 @@ def create_bakeoff_submission():
 
 
 if __name__ == '__main__':
-    create_bakeoff_submission()
+    # create_bakeoff_submission()
     # print(dev_exs)
     def evaluate_few_shot_open_qa(
             examples,
@@ -495,8 +495,7 @@ if __name__ == '__main__':
                         train_exs.append(squadexample)
                 return train_exs
 
-            ps = [build_few_shot_open_qa_prompt(ex.question, getpassage(ex.question)[0][0],
-                                                random.sample(dev_exs, k=2), joiner) for ex in examples[i: i + batch_size]]
+            ps = [build_zero_shot_openqa_prompt(ex.question, getpassage(ex.question)[0][0]) for ex in examples[i: i + batch_size]]
             gs = gen_func(ps)
             prompts += ps
             gens += gs
