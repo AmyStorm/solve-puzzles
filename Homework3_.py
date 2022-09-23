@@ -482,23 +482,18 @@ if __name__ == '__main__':
 
         gens = []
 
-        for i in range(0, len(examples), batch_size):
+        for i in range(0, len(examples)):
+            question = examples[i].question
 
-            def getpassage(question):
-                passages, passage_probs = get_passages_with_scores(question)
-                return passages, passage_probs
-
-            def gettrainexs(question):
-                train_exs = []
-                for squadexample in dev_exs:
-                    if squadexample.question == question or squadexample.title in question:
-                        train_exs.append(squadexample)
-                return train_exs
-
-            ps = [build_zero_shot_openqa_prompt(ex.question, getpassage(ex.question)[0][0]) for ex in examples[i: i + batch_size]]
-            gs = gen_func(ps)
+            passages, passage_probs = get_passages_with_scores(question)
+            train_exs = []
+            for squadexample in dev_exs:
+                if squadexample.question == question or squadexample.title in question:
+                    train_exs.append(squadexample)
+            ps = [build_few_shot_open_qa_prompt(question, psg, train_exs) for psg in passages]
+            data = answer_scoring(passages, passage_probs, ps)
             prompts += ps
-            gens += gs
+            gens += data[0][1]
             print(len(prompts))
             print(len(gens))
         return evaluate(examples, prompts, gens)
