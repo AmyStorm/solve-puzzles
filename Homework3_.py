@@ -522,7 +522,7 @@ if __name__ == '__main__':
             ps = [build_few_shot_open_qa_prompt(question, psg, train_exs) for psg in passages]
             ps2, gs = answer_scoring_ev(passages, passage_probs, ps)
             prompts.append(ps2)
-            gens += gs
+            gens.append(gs)
             print(len(prompts))
             print(len(gens))
         return evaluate(examples, prompts, gens)
