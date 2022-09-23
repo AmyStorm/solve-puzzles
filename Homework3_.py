@@ -491,9 +491,9 @@ if __name__ == '__main__':
                 if squadexample.question == question or squadexample.title in question:
                     train_exs.append(squadexample)
             ps = [build_few_shot_open_qa_prompt(question, psg, train_exs) for psg in passages]
-            data = answer_scoring(passages, passage_probs, ps)
+            gs = gen_func(ps)
             prompts += ps
-            gens += data[0][1]
+            gens += gs
             print(len(prompts))
             print(len(gens))
         return evaluate(examples, prompts, gens)
