@@ -520,7 +520,7 @@ if __name__ == '__main__':
                 if squadexample.question == question or squadexample.title in question:
                     train_exs.append(squadexample)
             ps = [build_few_shot_open_qa_prompt(question, psg, train_exs) for psg in passages]
-            ps, gs = answer_scoring(passages, passage_probs, ps)
+            ps, gs = answer_scoring_ev(passages, passage_probs, ps)
             prompts += ps
             gens += gs
             print(len(prompts))
