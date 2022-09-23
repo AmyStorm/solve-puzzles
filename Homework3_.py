@@ -416,6 +416,35 @@ def answer_scoring(passages, passage_probs, prompts, gen_func=run_eleuther):
     return data
 
 
+def answer_scoring_ev(passages, passage_probs, prompts, gen_func=run_eleuther):
+
+    data = []
+    for passage, passage_prob, prompt in zip(passages, passage_probs, prompts):
+
+
+        # Run `gen_func` on [prompt] (crucially, the singleton list here),
+        # and get the dictionary `gen` from the singleton list `gen_func`
+        # returns, and then use the values to score `gen` according to our
+        # scoring method.
+        #
+        # Be sure to use "generated_answer_probs" for the scores.
+
+        gen = gen_func(prompt)
+        answer_probs = gen[0].get('generated_answer_probs')
+        scores = [a * passage_prob for a in answer_probs]
+        for score in scores:
+            if ' I don\'t know.' in gen[0].get('generated_answer'):
+                data.append([0, gen[0], prompt])
+            else:
+                data.append([score, gen[0], prompt])
+
+
+    # Return `data`, sorted with the highest scoring `(score, gen)`
+    # pair given first.
+    data.sort(key=lambda x: x[0], reverse=True)
+    return data[0][2], data[0][1]
+
+
 def answer_exec(question):
     """Example usage for answer_scoring. Here we extract the top-scoring
     results, which can then be used in an evaluation."""
@@ -491,7 +520,7 @@ if __name__ == '__main__':
                 if squadexample.question == question or squadexample.title in question:
                     train_exs.append(squadexample)
             ps = [build_few_shot_open_qa_prompt(question, psg, train_exs) for psg in passages]
-            gs = gen_func(ps)
+            ps, gs = answer_scoring(passages, passage_probs, ps)
             prompts += ps
             gens += gs
             print(len(prompts))
