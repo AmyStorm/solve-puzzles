@@ -22,7 +22,9 @@ torch.backends.cudnn.benchmark = False
 import openai
 import transformers
 from transformers import AutoTokenizer, AutoModelForCausalLM
-
+import sys
+f = open('homework3_print.txt', 'w+')
+sys.stdout = f
 
 # import torch
 #
