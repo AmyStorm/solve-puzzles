@@ -3,19 +3,14 @@ import random
 import sys
 import time
 
-from itertools import product
-
 import torch
-from nltk.tokenize.treebank import TreebankWordTokenizer
 import numpy as np
 import os
 import pandas as pd
 from datasets import load_dataset
-import warnings
 
 from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data import Dataset
-from transformers import BertModel, BertTokenizer, AdamW, get_constant_schedule_with_warmup
+from transformers import BertModel, BertTokenizer, get_constant_schedule_with_warmup
 import vsm
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression
@@ -23,14 +18,24 @@ from sklearn.linear_model import LogisticRegression
 import nli
 import utils
 
+import logging
+
+t = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+# log = logging.getLogger()
+# stdout_handler = logging.StreamHandler(sys.stdout)
+# stdout_handler.setLevel(logging.INFO)
+# file_handler = logging.FileHandler(f'snli_print-{t}.txt')
+# file_handler.setLevel(logging.DEBUG)
+# log.addHandler(stdout_handler)
+# log.addHandler(file_handler)
+logging.basicConfig(filename=f'nli_print-{t}.txt',
+                    format='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+                    level=logging.DEBUG)
+
 from datasets import load_dataset
 
 
 import torch.nn as nn
-import torch.optim as optim
-# t = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-# f = open(f'snli_print-{t}.txt', 'w+')
-# sys.stdout = f
 
 DATA_HOME = os.path.join("data", "nlidata")
 
@@ -189,8 +194,8 @@ def combine_mask(mask):
 
 def snli_csv_gen():
     snli = load_dataset("snli")
-    print(torch.cuda.is_available())
-    print(snli.keys())
+    logging.debug(torch.cuda.is_available())
+    logging.debug(snli.keys())
 
     # snli_trains = pd.DataFrame(columns=['premise', 'hypothesis', 'label', 'sequence', 'attention_mask', 'token_type'])
     # nli.NLIReader(snli['train'], samp_percentage=0.10, random_state=42)
@@ -316,7 +321,7 @@ def snli_csv_gen():
     # snli_ex["premise"]
     # snli_ex["label"]
 
-    print(snli_trains)
+    logging.debug(snli_trains)
     os.makedirs('snli_1.0', exist_ok=True)
     snli_trains.to_csv('snli_1.0/snli_1.0_train.csv', index=False)
     snli_valid.to_csv('snli_1.0/snli_1.0_dev.csv', index=False)
@@ -325,8 +330,7 @@ def snli_csv_gen():
 
 def mnli_csv_gen():
     mnli = load_dataset("multi_nli")
-    print(torch.cuda.is_available())
-    print(mnli.keys())
+    logging.info(mnli.keys())
 
     # snli_trains = pd.DataFrame(columns=['premise', 'hypothesis', 'label', 'sequence', 'attention_mask', 'token_type'])
     # nli.NLIReader(snli['train'], samp_percentage=0.10, random_state=42)
@@ -452,170 +456,327 @@ def mnli_csv_gen():
     # snli_ex["premise"]
     # snli_ex["label"]
 
-    print(snli_trains)
+    logging.debug(snli_trains)
     os.makedirs('mnli_1.0', exist_ok=True)
     snli_trains.to_csv('mnli_1.0/mnli_train.csv', index=False)
     snli_valid.to_csv('mnli_1.0/mnli_validation_matched.csv', index=False)
     snli_test.to_csv('mnli_1.0/mnli_validation_mismatched.csv', index=False)
 
 
+def impli_csv_gen():
+    mnli = load_dataset("multi_nli")
+    logging.info(mnli.keys())
+
+
+    snli_trains_premise = pd.Series([ex.premise
+                                        for ex in nli.NLIReader(mnli['train'], filter_unlabeled=True).read()])
+    snli_trains_hypothesis = pd.Series([ex.hypothesis
+                                           for ex in nli.NLIReader(mnli['train'], filter_unlabeled=True).read()])
+    snli_trains_label = pd.Series([ex.label
+                                      for ex in nli.NLIReader(mnli['train'], filter_unlabeled=True).read()])
+    snli_valid_premise = pd.Series([ex.premise
+                                        for ex in nli.NLIReader(mnli['validation_matched'], filter_unlabeled=True).read()])
+    snli_valid_hypothesis = pd.Series([ex.hypothesis
+                                        for ex in nli.NLIReader(mnli['validation_matched'], filter_unlabeled=True).read()])
+    snli_valid_label = pd.Series([ex.label
+                                        for ex in nli.NLIReader(mnli['validation_matched'], filter_unlabeled=True).read()])
+    snli_test_premise = pd.Series([ex.premise
+                                        for ex in nli.NLIReader(mnli['validation_mismatched'], filter_unlabeled=True).read()])
+    snli_test_hypothesis = pd.Series([ex.hypothesis
+                                        for ex in nli.NLIReader(mnli['validation_mismatched'], filter_unlabeled=True).read()])
+    snli_test_label = pd.Series([ex.label
+                                        for ex in nli.NLIReader(mnli['validation_mismatched'], filter_unlabeled=True).read()])
+
+    snli_trains = pd.DataFrame()
+    snli_trains.insert(loc=0, column='premise', value=snli_trains_premise)
+    snli_trains.insert(loc=1, column='hypothesis', value=snli_trains_hypothesis)
+    snli_trains.insert(loc=2, column='label', value=snli_trains_label)
+    snli_valid = pd.DataFrame()
+    snli_valid.insert(loc=0, column='premise', value=snli_valid_premise)
+    snli_valid.insert(loc=1, column='hypothesis', value=snli_valid_hypothesis)
+    snli_valid.insert(loc=2, column='label', value=snli_valid_label)
+    snli_test = pd.DataFrame()
+    snli_test.insert(loc=0, column='premise', value=snli_test_premise)
+    snli_test.insert(loc=1, column='hypothesis', value=snli_test_hypothesis)
+    snli_test.insert(loc=2, column='label', value=snli_test_label)
+    # snli_trains = pd.Series(
+    #     [ex.label for ex in nli.NLIReader(
+    #         snli['train'], filter_unlabeled=True).read()])
+    #
+    # snli_valid = pd.Series(
+    #     [ex.label for ex in nli.NLIReader(
+    #         snli['validation'], filter_unlabeled=True).read()])
+    #
+    # snli_test = pd.Series(
+    #     [ex.label for ex in nli.NLIReader(
+    #         snli['test'], filter_unlabeled=True).read()])
+
+    ## decrease datas
+    # snli_trains = snli_trains[:10]
+    # snli_valid = snli_valid[:1]
+    # snli_test = snli_test[:1]
+
+
+    # Add [CLS] and [SEP] tokens
+    seq_train_1 = np.full((snli_trains[['premise']].size, 1), bert_tokenizer.cls_token + ' ') + \
+                   snli_trains[['premise']].apply(trim_sentence) + \
+                   np.full((snli_trains[['premise']].size, 1), ' ' + bert_tokenizer.sep_token + ' ')
+    seq_train_2 = snli_trains[['hypothesis']].apply(trim_sentence) + \
+                   np.full((snli_trains[['hypothesis']].size, 1), ' ' + bert_tokenizer.sep_token)
+    seq_dev_1 = np.full((snli_valid[['premise']].size, 1), bert_tokenizer.cls_token + ' ') + \
+                 snli_valid[['premise']].apply(trim_sentence) + \
+                 np.full((snli_valid[['premise']].size, 1), ' ' + bert_tokenizer.sep_token + ' ')
+    seq_dev_2 = snli_valid[['hypothesis']].apply(trim_sentence) + \
+                 np.full((snli_valid[['hypothesis']].size, 1), ' ' + bert_tokenizer.sep_token)
+    seq_test_1 = np.full((snli_test[['premise']].size, 1), bert_tokenizer.cls_token + ' ') + \
+                  snli_test[['premise']].apply(trim_sentence) + \
+                  np.full((snli_test[['premise']].size, 1), ' ' + bert_tokenizer.sep_token + ' ')
+    seq_test_2 = snli_test[['hypothesis']].apply(trim_sentence) + \
+                  np.full((snli_test[['hypothesis']].size, 1), ' ' + bert_tokenizer.sep_token)
+
+
+    # Apply Bert Tokenizer for tokeinizing
+    tk_train_1 = seq_train_1.T.apply(lambda x: tokenize_bert(x[0]))
+    tk_train_2 = seq_train_2.T.apply(lambda x: tokenize_bert(x[0]))
+    tk_dev_1 = seq_dev_1.T.apply(lambda x: tokenize_bert(x[0]))
+    tk_dev_2 = seq_dev_2.T.apply(lambda x: tokenize_bert(x[0]))
+    tk_test_1 = seq_test_1.T.apply(lambda x: tokenize_bert(x[0]))
+    tk_test_2 = seq_test_2.T.apply(lambda x: tokenize_bert(x[0]))
+
+
+    tkt_train_1 = tk_train_1.apply(lambda x: get_sent1_token_type(x))
+    tkt_train_2 = tk_train_2.apply(lambda x: get_sent2_token_type(x))
+    tkt_dev_1 = tk_dev_1.apply(lambda x: get_sent1_token_type(x))
+    tkt_dev_2 = tk_dev_2.apply(lambda x: get_sent2_token_type(x))
+    tkt_test_1 = tk_test_1.apply(lambda x: get_sent1_token_type(x))
+    tkt_test_2 = tk_test_2.apply(lambda x: get_sent2_token_type(x))
+
+    # Combine both sequences
+    snli_trains_seq = tk_train_1 + tk_train_2
+    snli_valid_seq = tk_dev_1 + tk_dev_2
+    snli_test_seq = tk_test_1 + tk_test_2
+
+    # Get attention mask
+    snli_trains_at = snli_trains_seq.apply(lambda x: get_sent2_token_type(x))
+    snli_valid_at = snli_valid_seq.apply(lambda x: get_sent2_token_type(x))
+    snli_test_at = snli_test_seq.apply(lambda x: get_sent2_token_type(x))
+
+    # Get combined token type ids for input
+    snli_trains_tt = tkt_train_1 + tkt_train_2
+    snli_valid_tt = tkt_dev_1 + tkt_dev_2
+    snli_test_tt = tkt_test_1 + tkt_test_2
+
+    # Now make all these inputs as sequential data to be easily fed into torchtext Field.
+    snli_trains.insert(loc=3, column='sequence', value=snli_trains_seq.apply(combine_seq))
+    snli_valid.insert(loc=3, column='sequence', value=snli_valid_seq.apply(combine_seq))
+    snli_test.insert(loc=3, column='sequence', value=snli_test_seq.apply(combine_seq))
+    snli_trains.insert(loc=4, column='attention_mask', value=snli_trains_at.apply(combine_mask))
+    snli_valid.insert(loc=4, column='attention_mask', value=snli_valid_at.apply(combine_mask))
+    snli_test.insert(loc=4, column='attention_mask', value=snli_test_at.apply(combine_mask))
+    snli_trains.insert(loc=5, column='token_type', value=snli_trains_tt.apply(combine_mask))
+    snli_valid.insert(loc=5, column='token_type', value=snli_valid_tt.apply(combine_mask))
+    snli_test.insert(loc=5, column='token_type', value=snli_test_tt.apply(combine_mask))
+
+    # snli_trains = snli_trains.drop(columns='premise')
+    # snli_trains = snli_trains.drop(columns='hypothesis')
+    # snli_valid = snli_valid.drop(columns='premise')
+    # snli_valid = snli_valid.drop(columns='hypothesis')
+    # snli_test = snli_test.drop(columns='premise')
+    # snli_test = snli_test.drop(columns='hypothesis')
+    # snli_iterator = iter(nli.NLIReader(snli['train']).read())
+    # snli_ex = next(snli_iterator)
+    # print(snli_ex)
+    # snli_ex["hypothesis"]
+    # snli_ex["premise"]
+    # snli_ex["label"]
+
+    logging.debug(snli_trains)
+    os.makedirs('mnli_1.0', exist_ok=True)
+    snli_trains.to_csv('mnli_1.0/mnli_train.csv', index=False)
+    snli_valid.to_csv('mnli_1.0/mnli_validation_matched.csv', index=False)
+    snli_test.to_csv('mnli_1.0/mnli_validation_mismatched.csv', index=False)
+
 # To convert back attention mask and token type ids to integer.
 def convert_to_int(tok_ids):
     tok_ids = [int(x) for x in tok_ids]
     return tok_ids
 
+def categorical_accuracy(preds, y):
+        max_preds = preds.argmax(dim=1, keepdim=True)
+        correct = (max_preds.squeeze(1) == y).float()
+        return correct.sum() / len(y)
 
+def train(model, iterator, optimizer, criterion, scheduler):
+    # print(iterator)
+
+    epoch_loss = 0
+    epoch_acc = 0
+
+    model.train()
+
+    for i, (labels, sequences, attention_masks, token_types) in enumerate(iterator):
+        optimizer.zero_grad()  # clear gradients first
+        torch.cuda.empty_cache()  # releases all unoccupied cached memory
+
+
+        # print(sequence.size(), attn_mask.size(), token_type.size())
+        # print(sequence[0])
+        # print(attn_mask[0])
+        # print(token_type[0])
+
+        predictions = model(sequences, attention_masks, token_types)
+
+        # predictions = [batch_size, 3]
+        # print(predictions.size())
+
+        loss = criterion(predictions, labels)
+
+        acc = categorical_accuracy(predictions, labels)
+
+        if fp16:
+            try:
+                from apex import amp
+            except ImportError:
+                raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+            with amp.scale_loss(loss, optimizer) as scaled_loss:
+                scaled_loss.backward()
+            torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), max_grad_norm)
+        else:
+            loss.backward()
+
+        optimizer.step()
+        scheduler.step()
+
+        epoch_loss += loss.item()
+        epoch_acc += acc.item()
+        now = time.strftime('"%Y-%m-%d %H:%M:%S"', time.localtime())
+        logging.debug(f'{now} batch {i} * BATCH_SIZE = {i * BATCH_SIZE}')
+
+    return epoch_loss / len(iterator), epoch_acc / len(iterator)
+
+def evaluate(model, iterator, criterion):
+    # print(iterator)
+    epoch_loss = 0
+    epoch_acc = 0
+
+    model.eval()
+
+    with torch.no_grad():
+        for i, (labels, sequences, attention_masks, token_types) in enumerate(iterator):
+            # print(batch)
+
+            predictions = model(sequences, attention_masks, token_types)
+
+            loss = criterion(predictions, labels)
+
+            acc = categorical_accuracy(predictions, labels)
+
+            epoch_loss += loss.item()
+            epoch_acc += acc.item()
+
+    return epoch_loss / len(iterator), epoch_acc / len(iterator)
+
+def epoch_time(start_time, end_time):
+        elapsed_time = end_time - start_time
+        elapsed_mins = int(elapsed_time / 60)
+        elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
+        return elapsed_mins, elapsed_secs
+
+def get_scheduler(optimizer, warmup_steps):
+        scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
+        return scheduler
+
+fp16 = False
+BATCH_SIZE = 32
+max_grad_norm = 1
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+from torch.utils.data import DataLoader, random_split
+from collections import Counter
+from torchtext.vocab import vocab
+
+def builditerator(filename):
+    # データ読み込み
+    df = pd.read_csv(filename)
+
+    # 単語分割
+    df['sequence'] = df['sequence'].map(lambda x: bert_tokenizer.convert_tokens_to_ids(split_and_cut(x)))
+    df['attention_mask'] = df['attention_mask'].map(lambda x: convert_to_int(split_and_cut(x)))
+    df['token_type'] = df['token_type'].map(lambda x: convert_to_int(split_and_cut(x)))
+
+    # ラベル辞書
+    df['label'] = df['label'].astype(str)  # ラベルが数値のため文字型に変換。文字型で指定していた場合はこの処理は不要
+    counter = Counter(df['label'])
+    label_vocab = vocab(counter, specials=(['<unk>']))
+    label_vocab.set_default_index(label_vocab['<unk>'])
+    # DataLoader設定
+    import torchtext.transforms as T
+
+    # transform生成
+    # text_transform = T.Sequential(T.ToTensor())
+    label_transform = lambda x: label_vocab[x]
+
+    # attention_mask_transform = T.Sequential(T.ToTensor())
+    # token_type_transform = T.Sequential(T.ToTensor())
+
+    def collate_batch(batch):
+        sequences, labels, attention_masks, token_types = [], [], [], []
+        for (label, sequence, attention_mask, token_type) in batch:
+            sequences.append(sequence)
+            labels.append(label_transform(label))
+            attention_masks.append(attention_mask)
+            token_types.append(token_type)
+        return torch.tensor(labels).to(device), \
+               pad_sequence([torch.tensor(s) for s in sequences], batch_first=True).to(device), \
+               pad_sequence([torch.tensor(a) for a in attention_masks], batch_first=True).to(device), \
+               pad_sequence([torch.tensor(t) for t in token_types], batch_first=True).to(device)
+
+    def batch_sampler():
+        indices = [(i, len(s[1])) for i, s in
+                   enumerate(df[['label', 'sequence', 'attention_mask', 'token_type']].values.tolist())]
+        random.shuffle(indices)
+        pooled_indices = []
+        # create pool of indices with similar lengths
+        for i in range(0, len(indices), BATCH_SIZE * 100):
+            pooled_indices.extend(sorted(indices[i:i + BATCH_SIZE * 100], key=lambda x: x[1]))
+
+        pooled_indices = [x[0] for x in pooled_indices]
+
+        # yield indices for current batch
+        for i in range(0, len(pooled_indices), BATCH_SIZE):
+            yield pooled_indices[i:i + BATCH_SIZE]
+
+    data_loader = DataLoader(df[['label', 'sequence', 'attention_mask', 'token_type']].values.tolist(),
+                             batch_sampler=batch_sampler(), collate_fn=collate_batch)
+    return label_vocab, data_loader
+
+
+class BERTNLIModel(nn.Module):
+    def __init__(self,
+                 bert_model,
+                 hidden_dim,
+                 output_dim, ):
+        super().__init__()
+        self.bert = bert_model
+
+        embedding_dim = bert_model.config.to_dict()['hidden_size']
+        self.out = nn.Linear(embedding_dim, output_dim)
+
+    def forward(self, sequence, attn_mask, token_type):
+        embedded = self.bert(input_ids=sequence, attention_mask=attn_mask, token_type_ids=token_type)[1]
+        output = self.out(embedded)
+        return output
 
 def snli_bert_exe():
-    # For latest version use torchtext.legacy
-    # from torchtext.legacy import data
 
-    # df_train['sequence'] = df_train['sequence'].map(lambda x: tokenizer(x))
-    # df_dev['sequence'] = df_dev['sequence'].map(lambda x: tokenizer(x))
-    # df_test['sequence'] = df_test['sequence'].map(lambda x: tokenizer(x))
-    from torch.utils.data import DataLoader
-    from collections import Counter
-    from torchtext.vocab import vocab
-
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    class BERTNLIModel(nn.Module):
-        def __init__(self,
-                     bert_model,
-                     hidden_dim,
-                     output_dim, ):
-            super().__init__()
-            self.bert = bert_model
-
-            embedding_dim = bert_model.config.to_dict()['hidden_size']
-            self.out = nn.Linear(embedding_dim, output_dim)
-
-        def forward(self, sequence, attn_mask, token_type):
-            # sequence = torch.tensor(sequence)
-            embedded = self.bert(input_ids=sequence, attention_mask=attn_mask, token_type_ids=token_type)[1]
-            output = self.out(embedded)
-            return output
-
-    # class PandasDataset(Dataset):
-    #     def __init__(self, dataframe):
-    #         self.dataframe = dataframe
-    #
-    #     def __len__(self):
-    #         return len(self.dataframe)
-    #
-    #     def __getitem__(self, index):
-    #         return self.dataframe.iloc[index]
-
-    BATCH_SIZE = 16
-    def builditerator(filename):
-        # データ読み込み
-        df = pd.read_csv(filename)
-
-        # 単語分割
-        df['sequence'] = df['sequence'].map(lambda x: bert_tokenizer.convert_tokens_to_ids(split_and_cut(x)))
-        df['attention_mask'] = df['attention_mask'].map(lambda x: convert_to_int(split_and_cut(x)))
-        df['token_type'] = df['token_type'].map(lambda x: convert_to_int(split_and_cut(x)))
-
-        # ラベル辞書
-        df['label'] = df['label'].astype(str)  # ラベルが数値のため文字型に変換。文字型で指定していた場合はこの処理は不要
-        counter = Counter(df['label'])
-        label_vocab = vocab(counter, specials=(['<unk>']))
-        label_vocab.set_default_index(label_vocab['<unk>'])
-        # DataLoader設定
-        import torchtext.transforms as T
-
-        # transform生成
-        # text_transform = T.Sequential(T.ToTensor())
-        label_transform = lambda x: label_vocab[x]
-        # attention_mask_transform = T.Sequential(T.ToTensor())
-        # token_type_transform = T.Sequential(T.ToTensor())
-
-        def collate_batch(batch):
-            sequences, labels, attention_masks, token_types = [], [], [], []
-            for (label, sequence, attention_mask, token_type) in batch:
-                sequences.append(sequence)
-                labels.append(label_transform(label))
-                attention_masks.append(attention_mask)
-                token_types.append(token_type)
-            return torch.tensor(labels).to(device), \
-                   pad_sequence([torch.tensor(s) for s in sequences], batch_first=True).to(device), \
-                   pad_sequence([torch.tensor(a) for a in attention_masks], batch_first=True).to(device), \
-                   pad_sequence([torch.tensor(t) for t in token_types], batch_first=True).to(device)
-            # sequences = text_transform([sequence for (label, sequence, attention_mask, token_type) in batch]).to(device)
-            # labels = label_transform([label for (label, sequence, attention_mask, token_type) in batch]).to(device)
-            # attention_masks = attention_mask_transform([attention_mask for
-            #                                            (label, sequence, attention_mask, token_type) in batch]).to(device)
-            # token_types = token_type_transform([token_type for
-            #                                     (label, sequence, attention_mask, token_type) in batch]).to(device)
-
-            # return labels, sequences, attention_masks, token_types
-
-        def batch_sampler():
-            indices = [(i, len(s[1])) for i, s in enumerate(list(df[['label', 'sequence', 'attention_mask', 'token_type']]))]
-            random.shuffle(indices)
-            pooled_indices = []
-            # create pool of indices with similar lengths
-            for i in range(0, len(indices), BATCH_SIZE * 100):
-                pooled_indices.extend(sorted(indices[i:i + BATCH_SIZE * 100], key=lambda x: x[1]))
-
-            pooled_indices = [x[0] for x in pooled_indices]
-
-            # yield indices for current batch
-            for i in range(0, len(pooled_indices), BATCH_SIZE):
-                yield pooled_indices[i:i + BATCH_SIZE]
-
-        data_loader = DataLoader(df[['label', 'sequence', 'attention_mask', 'token_type']].values.tolist(),
-                                 batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch)
-        return label_vocab, data_loader
-
+    logging.info('snli_bert_exe start')
     text_vocab, train_it = builditerator('snli_1.0/snli_1.0_train.csv')
     text_vocab_dev, valid_it = builditerator('snli_1.0/snli_1.0_dev.csv')
     text_vocab_test, test_it = builditerator('snli_1.0/snli_1.0_test.csv')
-    # # For sequence
-    # TEXT = data.Field(batch_first=True,
-    #                   use_vocab=False,
-    #                   tokenize=split_and_cut,
-    #                   preprocessing=bert_tokenizer.convert_tokens_to_ids,
-    #                   pad_token=bert_tokenizer.pad_token_id,
-    #                   unk_token=bert_tokenizer.unk_token_id)
-    # # For label
-    # LABEL = data.LabelField()
-    # # For Attention mask
-    # ATTENTION = data.Field(batch_first=True,
-    #                        use_vocab=False,
-    #                        tokenize=split_and_cut,
-    #                        preprocessing=convert_to_int,
-    #                        pad_token=bert_tokenizer.pad_token_id)
-    # # For token type ids
-    # TTYPE = data.Field(batch_first=True,
-    #                    use_vocab=False,
-    #                    tokenize=split_and_cut,
-    #                    preprocessing=convert_to_int,
-    #                    pad_token=1)
-    # fields = [('label', LABEL), ('sequence', TEXT),
-    #           ('attention_mask', ATTENTION), ('token_type', TTYPE)]
-    # train_data, valid_data, test_data = data.TabularDataset.splits(
-    #     path='snli_1.0',
-    #     train='snli_1.0_train.csv',
-    #     validation='snli_1.0_dev.csv',
-    #     test='snli_1.0_test.csv',
-    #     format='csv',
-    #     fields=fields,
-    #     skip_header=True)
-    print(f"Number of train data: {len(train_it.dataset)}")
-    print(f"Number of train data: {len(valid_it.dataset)}")
-    print(f"Number of train data: {len(test_it.dataset)}")
 
-    # LABEL.build_vocab(train_data)
-
-    # Create iterator
-
-    # train_iterator, valid_iterator, test_iterator = data.BucketIterator.splits(
-    #     (train_data, valid_data, test_data),
-    #     batch_size=BATCH_SIZE,
-    #     sort_key=lambda x: len(x.sequence),
-    #     sort_within_batch=False,
-    #     device=device)
+    logging.info(f"Number of train data: {len(train_it.dataset)}")
+    logging.info(f"Number of dev data: {len(valid_it.dataset)}")
+    logging.info(f"Number of test data: {len(test_it.dataset)}")
 
     # defining model
     HIDDEN_DIM = 512
@@ -627,98 +788,14 @@ def snli_bert_exe():
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5, eps=1e-6)
 
-    def get_scheduler(optimizer, warmup_steps):
-        scheduler = get_constant_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps)
-        return scheduler
-
     criterion = nn.CrossEntropyLoss().to(device)
 
-    def categorical_accuracy(preds, y):
-        max_preds = preds.argmax(dim=1, keepdim=True)
-        correct = (max_preds.squeeze(1) == y).float()
-        return correct.sum() / len(y)
-
-    fp16 = False
     if fp16:
         try:
             from apex import amp
         except ImportError:
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
         model, optimizer = amp.initialize(model, optimizer, opt_level='O1')
-
-    max_grad_norm = 1
-
-    def train(model, iterator, optimizer, criterion, scheduler):
-        # print(iterator)
-
-        epoch_loss = 0
-        epoch_acc = 0
-
-        model.train()
-
-        for i, (labels, sequences, attention_masks, token_types) in enumerate(iterator):
-            optimizer.zero_grad()  # clear gradients first
-            torch.cuda.empty_cache()  # releases all unoccupied cached memory
-
-
-            # print(sequence.size(), attn_mask.size(), token_type.size())
-            # print(sequence[0])
-            # print(attn_mask[0])
-            # print(token_type[0])
-
-            predictions = model(sequences, attention_masks, token_types)
-
-            # predictions = [batch_size, 3]
-            # print(predictions.size())
-
-            loss = criterion(predictions, labels)
-
-            acc = categorical_accuracy(predictions, labels)
-
-            if fp16:
-                with amp.scale_loss(loss, optimizer) as scaled_loss:
-                    scaled_loss.backward()
-                torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), max_grad_norm)
-            else:
-                loss.backward()
-
-            optimizer.step()
-            scheduler.step()
-
-            epoch_loss += loss.item()
-            epoch_acc += acc.item()
-            now = time.strftime('"%Y-%m-%d %H:%M:%S"', time.localtime())
-            print(f'{now} batch {i} * BATCH_SIZE = {i * BATCH_SIZE}')
-
-        return epoch_loss / len(iterator), epoch_acc / len(iterator)
-
-    def evaluate(model, iterator, criterion):
-        # print(iterator)
-        epoch_loss = 0
-        epoch_acc = 0
-
-        model.eval()
-
-        with torch.no_grad():
-            for i, (labels, sequences, attention_masks, token_types) in enumerate(iterator):
-                # print(batch)
-
-                predictions = model(sequences, attention_masks, token_types)
-
-                loss = criterion(predictions, labels)
-
-                acc = categorical_accuracy(predictions, labels)
-
-                epoch_loss += loss.item()
-                epoch_acc += acc.item()
-
-        return epoch_loss / len(iterator), epoch_acc / len(iterator)
-
-    def epoch_time(start_time, end_time):
-        elapsed_time = end_time - start_time
-        elapsed_mins = int(elapsed_time / 60)
-        elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
-        return elapsed_mins, elapsed_secs
 
     N_EPOCHS = 6
     train_data_len = len(train_it.dataset)
@@ -744,15 +821,15 @@ def snli_bert_exe():
             best_valid_loss = valid_loss
             torch.save(model.state_dict(), 'bert-nli.pt')
 
-        print(f'Epoch: {epoch + 1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
-        print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc * 100:.2f}%')
-        print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc * 100:.2f}%')
+        logging.info(f'Epoch: {epoch + 1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
+        logging.info(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc * 100:.2f}%')
+        logging.info(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc * 100:.2f}%')
 
     model.load_state_dict(torch.load('bert-nli.pt'))
 
     test_loss, test_acc = evaluate(model, test_it, criterion)
 
-    print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc * 100:.2f}%')
+    logging.info(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc * 100:.2f}%')
 
     def predict_inference(premise, hypothesis, model, device):
 
@@ -807,21 +884,125 @@ def snli_bert_exe():
     hypothesis = 'a woman sitting on a green bench.'
 
     result = predict_inference(premise, hypothesis, model, device)
-    print(f'premise:{premise}')
-    print(f'hypothesis:{hypothesis}')
-    print(f'result:{result}')
+    logging.info(f'premise:{premise}')
+    logging.info(f'hypothesis:{hypothesis}')
+    logging.info(f'result:{result}')
     premise = 'a man sitting on a green bench.'
     hypothesis = 'a man sitting on a blue bench.'
 
     predict_inference(premise, hypothesis, model, device)
-    print(f'premise:{premise}')
-    print(f'hypothesis:{hypothesis}')
-    print(f'result:{result}')
+    logging.info(f'premise:{premise}')
+    logging.info(f'hypothesis:{hypothesis}')
+    logging.info(f'result:{result}')
+
+
+def mnli_bert_exe():
+    logging.info('mnli_bert_exe start')
+    text_vocab, train_it = builditerator('mnli_1.0/mnli_train.csv')
+    text_vocab_dev, matched_it = builditerator('mnli_1.0/mnli_validation_matched.csv')
+    text_vocab_test, mismatched_it = builditerator('mnli_1.0/mnli_validation_mismatched.csv')
+
+    matched_len = len(matched_it.dataset)
+    mismatched_len = len(mismatched_it.dataset)
+    matched_valid_it, matched_test_it = random_split(
+        dataset=matched_it.dataset,
+        lengths=[int(matched_len * 0.5), matched_len - int(matched_len * 0.5)],
+        generator=torch.Generator().manual_seed(0)
+    )
+
+    mismatched_valid_it, mismatched_test_it = random_split(
+        dataset=mismatched_it.dataset,
+        lengths=[int(mismatched_len * 0.5), mismatched_len - int(mismatched_len * 0.5)],
+        generator=torch.Generator().manual_seed(0)
+    )
+
+    logging.info(f"Number of train data: {len(train_it.dataset)}")
+    logging.info(f"Number of dev data: {len(matched_valid_it.dataset)}")
+    logging.info(f"Number of dev data: {len(matched_test_it.dataset)}")
+    logging.info(f"Number of test data: {len(mismatched_valid_it.dataset)}")
+    logging.info(f"Number of test data: {len(mismatched_test_it.dataset)}")
+
+    # defining model
+    HIDDEN_DIM = 512
+    OUTPUT_DIM = len(text_vocab.vocab)
+    model = BERTNLIModel(bert_model,
+                         HIDDEN_DIM,
+                         OUTPUT_DIM,
+                         ).to(device)
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5, eps=1e-6)
+
+    criterion = nn.CrossEntropyLoss().to(device)
+
+    if fp16:
+        try:
+            from apex import amp
+        except ImportError:
+            raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+        model, optimizer = amp.initialize(model, optimizer, opt_level='O1')
+
+    N_EPOCHS = 6
+    train_data_len = len(train_it.dataset)
+    warmup_percent = 0.2
+    total_steps = math.ceil(N_EPOCHS * train_data_len * 1. / BATCH_SIZE)
+    warmup_steps = int(total_steps * warmup_percent)
+    scheduler = get_scheduler(optimizer, warmup_steps)
+
+    best_valid_loss1 = float('inf')
+    best_valid_loss2 = float('inf')
+
+    for epoch in range(N_EPOCHS):
+
+        start_time = time.time()
+
+        train_loss, train_acc = train(model, train_it, optimizer, criterion, scheduler)
+        valid_loss, valid_acc = evaluate(model, matched_valid_it, criterion)
+
+        end_time = time.time()
+
+        epoch_mins, epoch_secs = epoch_time(start_time, end_time)
+
+        if valid_loss < best_valid_loss1:
+            best_valid_loss1 = valid_loss
+            torch.save(model.state_dict(), 'bert-mnli-matched.pt')
+
+        logging.info(f'Epoch: {epoch + 1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
+        logging.info(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc * 100:.2f}%')
+        logging.info(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc * 100:.2f}%')
+        logging.info(f'\t BEST Val. Loss: {best_valid_loss1:.3f}')
+
+        mis_valid_loss, mis_valid_acc = evaluate(model, mismatched_valid_it, criterion)
+
+        start_time = time.time()
+        end_time = time.time()
+        epoch_mins, epoch_secs = epoch_time(start_time, end_time)
+
+        if mis_valid_loss < best_valid_loss2:
+            best_valid_loss2 = mis_valid_loss
+            torch.save(model.state_dict(), 'bert-mnli-mismatched.pt')
+
+        logging.info(f'MIS Epoch: {epoch + 1:02} | MIS Epoch Time: {epoch_mins}m {epoch_secs}s')
+        logging.info(f'\tMIS Train Loss: {train_loss:.3f} | MIS Train Acc: {train_acc * 100:.2f}%')
+        logging.info(f'\tMIS Val. Loss: {mis_valid_loss:.3f} |  MIS Val. Acc: {mis_valid_acc * 100:.2f}%')
+        logging.info(f'\t BEST MIS Val. Loss: {best_valid_loss2:.3f}')
+
+    model.load_state_dict(torch.load('bert-mnli-matched.pt'))
+
+    test_loss, test_acc = evaluate(model, matched_test_it, criterion)
+
+    logging.info(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc * 100:.2f}%')
+
+    model.load_state_dict(torch.load('bert-mnli-mismatched.pt'))
+    mis_test_loss, mis_test_acc = evaluate(model, mismatched_test_it, criterion)
+
+    logging.info(f'MIS Test Loss: {mis_test_loss:.3f} |  MIS Test Acc: {mis_test_acc * 100:.2f}%')
 
 
 if __name__ == '__main__':
     # snli_csv_gen()
     # mnli_csv_gen()
+    logging.info('start')
+    mnli_bert_exe()
     snli_bert_exe()
 
     # word_cross_product_experiment_xval = nli.experiment(
