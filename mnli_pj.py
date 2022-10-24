@@ -20,17 +20,23 @@ import utils
 
 import logging
 
-t = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-# log = logging.getLogger()
-# stdout_handler = logging.StreamHandler(sys.stdout)
-# stdout_handler.setLevel(logging.INFO)
-# file_handler = logging.FileHandler(f'snli_print-{t}.txt')
-# file_handler.setLevel(logging.DEBUG)
-# log.addHandler(stdout_handler)
-# log.addHandler(file_handler)
-logging.basicConfig(filename=f'nli_print-{t}.txt',
-                    format='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s',
-                    level=logging.DEBUG)
+t = time.strftime('%Y-%m-%d-%H:%M:%S', time.localtime())
+log = logging.getLogger()
+log.setLevel(logging.DEBUG)
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s: - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S')
+stdout_handler = logging.StreamHandler()
+stdout_handler.setLevel(logging.INFO)
+stdout_handler.setFormatter(formatter)
+file_handler = logging.FileHandler(f'nli_print-{t}.txt')
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(formatter)
+log.addHandler(stdout_handler)
+log.addHandler(file_handler)
+# logging.basicConfig(filename=f'nli_print-{t}.txt',
+#                     format='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+#                     level=logging.DEBUG)
 
 from datasets import load_dataset
 
@@ -194,8 +200,8 @@ def combine_mask(mask):
 
 def snli_csv_gen():
     snli = load_dataset("snli")
-    logging.debug(torch.cuda.is_available())
-    logging.debug(snli.keys())
+    log.debug(torch.cuda.is_available())
+    log.debug(snli.keys())
 
     # snli_trains = pd.DataFrame(columns=['premise', 'hypothesis', 'label', 'sequence', 'attention_mask', 'token_type'])
     # nli.NLIReader(snli['train'], samp_percentage=0.10, random_state=42)
@@ -321,7 +327,7 @@ def snli_csv_gen():
     # snli_ex["premise"]
     # snli_ex["label"]
 
-    logging.debug(snli_trains)
+    log.debug(snli_trains)
     os.makedirs('snli_1.0', exist_ok=True)
     snli_trains.to_csv('snli_1.0/snli_1.0_train.csv', index=False)
     snli_valid.to_csv('snli_1.0/snli_1.0_dev.csv', index=False)
@@ -330,7 +336,7 @@ def snli_csv_gen():
 
 def mnli_csv_gen():
     mnli = load_dataset("multi_nli")
-    logging.info(mnli.keys())
+    log.info(mnli.keys())
 
     # snli_trains = pd.DataFrame(columns=['premise', 'hypothesis', 'label', 'sequence', 'attention_mask', 'token_type'])
     # nli.NLIReader(snli['train'], samp_percentage=0.10, random_state=42)
@@ -456,7 +462,7 @@ def mnli_csv_gen():
     # snli_ex["premise"]
     # snli_ex["label"]
 
-    logging.debug(snli_trains)
+    log.debug(snli_trains)
     os.makedirs('mnli_1.0', exist_ok=True)
     snli_trains.to_csv('mnli_1.0/mnli_train.csv', index=False)
     snli_valid.to_csv('mnli_1.0/mnli_validation_matched.csv', index=False)
@@ -465,7 +471,7 @@ def mnli_csv_gen():
 
 def impli_csv_gen():
     mnli = load_dataset("multi_nli")
-    logging.info(mnli.keys())
+    log.info(mnli.keys())
 
 
     snli_trains_premise = pd.Series([ex.premise
@@ -590,7 +596,7 @@ def impli_csv_gen():
     # snli_ex["premise"]
     # snli_ex["label"]
 
-    logging.debug(snli_trains)
+    log.debug(snli_trains)
     os.makedirs('mnli_1.0', exist_ok=True)
     snli_trains.to_csv('mnli_1.0/mnli_train.csv', index=False)
     snli_valid.to_csv('mnli_1.0/mnli_validation_matched.csv', index=False)
@@ -606,7 +612,7 @@ def categorical_accuracy(preds, y):
         correct = (max_preds.squeeze(1) == y).float()
         return correct.sum() / len(y)
 
-def train(model, iterator, optimizer, criterion, scheduler):
+def train(model, iterator, optimizer, criterion, scheduler, epoch):
     # print(iterator)
 
     epoch_loss = 0
@@ -650,9 +656,9 @@ def train(model, iterator, optimizer, criterion, scheduler):
         epoch_loss += loss.item()
         epoch_acc += acc.item()
         now = time.strftime('"%Y-%m-%d %H:%M:%S"', time.localtime())
-        logging.debug(f'{now} batch {i} * BATCH_SIZE = {i * BATCH_SIZE}')
+        log.debug(f'{now} epoch {epoch}  batch {i} * BATCH_SIZE = {i * BATCH_SIZE}')
 
-    return epoch_loss / len(iterator), epoch_acc / len(iterator)
+    return epoch_loss / len(iterator.dataset), epoch_acc / len(iterator.dataset)
 
 def evaluate(model, iterator, criterion):
     # print(iterator)
@@ -674,7 +680,7 @@ def evaluate(model, iterator, criterion):
             epoch_loss += loss.item()
             epoch_acc += acc.item()
 
-    return epoch_loss / len(iterator), epoch_acc / len(iterator)
+    return epoch_loss / len(iterator.dataset), epoch_acc / len(iterator.dataset)
 
 def epoch_time(start_time, end_time):
         elapsed_time = end_time - start_time
@@ -695,10 +701,7 @@ from torch.utils.data import DataLoader, random_split
 from collections import Counter
 from torchtext.vocab import vocab
 
-def builditerator(filename):
-    # データ読み込み
-    df = pd.read_csv(filename)
-
+def builditerator(df):
     # 単語分割
     df['sequence'] = df['sequence'].map(lambda x: bert_tokenizer.convert_tokens_to_ids(split_and_cut(x)))
     df['attention_mask'] = df['attention_mask'].map(lambda x: convert_to_int(split_and_cut(x)))
@@ -769,14 +772,14 @@ class BERTNLIModel(nn.Module):
 
 def snli_bert_exe():
 
-    logging.info('snli_bert_exe start')
-    text_vocab, train_it = builditerator('snli_1.0/snli_1.0_train.csv')
-    text_vocab_dev, valid_it = builditerator('snli_1.0/snli_1.0_dev.csv')
-    text_vocab_test, test_it = builditerator('snli_1.0/snli_1.0_test.csv')
+    log.info('snli_bert_exe start')
+    text_vocab, train_it = builditerator(pd.read_csv('snli_1.0/snli_1.0_train.csv'))
+    text_vocab_dev, valid_it = builditerator(pd.read_csv('snli_1.0/snli_1.0_dev.csv'))
+    text_vocab_test, test_it = builditerator(pd.read_csv('snli_1.0/snli_1.0_test.csv'))
 
-    logging.info(f"Number of train data: {len(train_it.dataset)}")
-    logging.info(f"Number of dev data: {len(valid_it.dataset)}")
-    logging.info(f"Number of test data: {len(test_it.dataset)}")
+    log.info(f"Number of train data: {len(train_it.dataset)}")
+    log.info(f"Number of dev data: {len(valid_it.dataset)}")
+    log.info(f"Number of test data: {len(test_it.dataset)}")
 
     # defining model
     HIDDEN_DIM = 512
@@ -797,7 +800,7 @@ def snli_bert_exe():
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
         model, optimizer = amp.initialize(model, optimizer, opt_level='O1')
 
-    N_EPOCHS = 6
+    N_EPOCHS = 12
     train_data_len = len(train_it.dataset)
     warmup_percent = 0.2
     total_steps = math.ceil(N_EPOCHS * train_data_len * 1. / BATCH_SIZE)
@@ -810,7 +813,7 @@ def snli_bert_exe():
 
         start_time = time.time()
 
-        train_loss, train_acc = train(model, train_it, optimizer, criterion, scheduler)
+        train_loss, train_acc = train(model, train_it, optimizer, criterion, scheduler, epoch)
         valid_loss, valid_acc = evaluate(model, valid_it, criterion)
 
         end_time = time.time()
@@ -821,15 +824,15 @@ def snli_bert_exe():
             best_valid_loss = valid_loss
             torch.save(model.state_dict(), 'bert-nli.pt')
 
-        logging.info(f'Epoch: {epoch + 1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
-        logging.info(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc * 100:.2f}%')
-        logging.info(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc * 100:.2f}%')
+        log.info(f'Epoch: {epoch + 1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
+        log.info(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc * 100:.2f}%')
+        log.info(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc * 100:.2f}%')
 
     model.load_state_dict(torch.load('bert-nli.pt'))
 
     test_loss, test_acc = evaluate(model, test_it, criterion)
 
-    logging.info(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc * 100:.2f}%')
+    log.info(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc * 100:.2f}%')
 
     def predict_inference(premise, hypothesis, model, device):
 
@@ -884,43 +887,57 @@ def snli_bert_exe():
     hypothesis = 'a woman sitting on a green bench.'
 
     result = predict_inference(premise, hypothesis, model, device)
-    logging.info(f'premise:{premise}')
-    logging.info(f'hypothesis:{hypothesis}')
-    logging.info(f'result:{result}')
+    log.info(f'premise:{premise}')
+    log.info(f'hypothesis:{hypothesis}')
+    log.info(f'result:{result}')
     premise = 'a man sitting on a green bench.'
     hypothesis = 'a man sitting on a blue bench.'
 
     predict_inference(premise, hypothesis, model, device)
-    logging.info(f'premise:{premise}')
-    logging.info(f'hypothesis:{hypothesis}')
-    logging.info(f'result:{result}')
+    log.info(f'premise:{premise}')
+    log.info(f'hypothesis:{hypothesis}')
+    log.info(f'result:{result}')
 
 
 def mnli_bert_exe():
-    logging.info('mnli_bert_exe start')
-    text_vocab, train_it = builditerator('mnli_1.0/mnli_train.csv')
-    text_vocab_dev, matched_it = builditerator('mnli_1.0/mnli_validation_matched.csv')
-    text_vocab_test, mismatched_it = builditerator('mnli_1.0/mnli_validation_mismatched.csv')
+    log.info('mnli_bert_exe start')
+    # text_vocab, train_it = builditerator('mnli_1.0/mnli_train.csv')
+    # text_vocab_dev, matched_it = builditerator('mnli_1.0/mnli_validation_matched.csv')
+    # text_vocab_test, mismatched_it = builditerator('mnli_1.0/mnli_validation_mismatched.csv')
 
-    matched_len = len(matched_it.dataset)
-    mismatched_len = len(mismatched_it.dataset)
+    text_vocab, train_it = builditerator(pd.read_csv('mnli_1.0/mnli_train.csv'))
+    matched_it = pd.read_csv('mnli_1.0/mnli_validation_matched.csv')
+    mismatched_it = pd.read_csv('mnli_1.0/mnli_validation_mismatched.csv')
+
+    matched_len = matched_it.shape[0]
+    mismatched_len = mismatched_it.shape[0]
     matched_valid_it, matched_test_it = random_split(
-        dataset=matched_it.dataset,
+        dataset=matched_it[['label', 'sequence', 'attention_mask', 'token_type']].values.tolist(),
         lengths=[int(matched_len * 0.5), matched_len - int(matched_len * 0.5)],
-        generator=torch.Generator().manual_seed(0)
+        generator=torch.Generator().manual_seed(1)
     )
 
     mismatched_valid_it, mismatched_test_it = random_split(
-        dataset=mismatched_it.dataset,
+        dataset=mismatched_it[['label', 'sequence', 'attention_mask', 'token_type']].values.tolist(),
         lengths=[int(mismatched_len * 0.5), mismatched_len - int(mismatched_len * 0.5)],
-        generator=torch.Generator().manual_seed(0)
+        generator=torch.Generator().manual_seed(1)
     )
 
-    logging.info(f"Number of train data: {len(train_it.dataset)}")
-    logging.info(f"Number of dev data: {len(matched_valid_it.dataset)}")
-    logging.info(f"Number of dev data: {len(matched_test_it.dataset)}")
-    logging.info(f"Number of test data: {len(mismatched_valid_it.dataset)}")
-    logging.info(f"Number of test data: {len(mismatched_test_it.dataset)}")
+
+    text_vocab_dev1, matched_valid_it = builditerator(
+        pd.DataFrame(list(matched_valid_it), columns=['label', 'sequence', 'attention_mask', 'token_type']))
+    text_vocab_dev2, matched_test_it = builditerator(
+        pd.DataFrame(list(matched_test_it), columns=['label', 'sequence', 'attention_mask', 'token_type']))
+    text_vocab_test1, mismatched_valid_it = builditerator(
+        pd.DataFrame(list(mismatched_valid_it), columns=['label', 'sequence', 'attention_mask', 'token_type']))
+    text_vocab_test2, mismatched_test_it = builditerator(
+        pd.DataFrame(list(mismatched_test_it), columns=['label', 'sequence', 'attention_mask', 'token_type']))
+
+    log.info(f"Number of train data: {len(train_it.dataset)}")
+    log.info(f"Number of dev data: {len(matched_valid_it.dataset)}")
+    log.info(f"Number of dev data: {len(matched_test_it.dataset)}")
+    log.info(f"Number of test data: {len(mismatched_valid_it.dataset)}")
+    log.info(f"Number of test data: {len(mismatched_test_it.dataset)}")
 
     # defining model
     HIDDEN_DIM = 512
@@ -941,7 +958,7 @@ def mnli_bert_exe():
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
         model, optimizer = amp.initialize(model, optimizer, opt_level='O1')
 
-    N_EPOCHS = 6
+    N_EPOCHS = 12
     train_data_len = len(train_it.dataset)
     warmup_percent = 0.2
     total_steps = math.ceil(N_EPOCHS * train_data_len * 1. / BATCH_SIZE)
@@ -955,7 +972,7 @@ def mnli_bert_exe():
 
         start_time = time.time()
 
-        train_loss, train_acc = train(model, train_it, optimizer, criterion, scheduler)
+        train_loss, train_acc = train(model, train_it, optimizer, criterion, scheduler, epoch)
         valid_loss, valid_acc = evaluate(model, matched_valid_it, criterion)
 
         end_time = time.time()
@@ -966,10 +983,10 @@ def mnli_bert_exe():
             best_valid_loss1 = valid_loss
             torch.save(model.state_dict(), 'bert-mnli-matched.pt')
 
-        logging.info(f'Epoch: {epoch + 1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
-        logging.info(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc * 100:.2f}%')
-        logging.info(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc * 100:.2f}%')
-        logging.info(f'\t BEST Val. Loss: {best_valid_loss1:.3f}')
+        log.info(f'Epoch: {epoch + 1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
+        log.info(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc * 100:.2f}%')
+        log.info(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc * 100:.2f}%')
+        log.info(f'\t BEST Val. Loss: {best_valid_loss1:.3f}')
 
         mis_valid_loss, mis_valid_acc = evaluate(model, mismatched_valid_it, criterion)
 
@@ -981,27 +998,27 @@ def mnli_bert_exe():
             best_valid_loss2 = mis_valid_loss
             torch.save(model.state_dict(), 'bert-mnli-mismatched.pt')
 
-        logging.info(f'MIS Epoch: {epoch + 1:02} | MIS Epoch Time: {epoch_mins}m {epoch_secs}s')
-        logging.info(f'\tMIS Train Loss: {train_loss:.3f} | MIS Train Acc: {train_acc * 100:.2f}%')
-        logging.info(f'\tMIS Val. Loss: {mis_valid_loss:.3f} |  MIS Val. Acc: {mis_valid_acc * 100:.2f}%')
-        logging.info(f'\t BEST MIS Val. Loss: {best_valid_loss2:.3f}')
+        log.info(f'MIS Epoch: {epoch + 1:02} | MIS Epoch Time: {epoch_mins}m {epoch_secs}s')
+        log.info(f'\tMIS Train Loss: {train_loss:.3f} | MIS Train Acc: {train_acc * 100:.2f}%')
+        log.info(f'\tMIS Val. Loss: {mis_valid_loss:.3f} |  MIS Val. Acc: {mis_valid_acc * 100:.2f}%')
+        log.info(f'\t BEST MIS Val. Loss: {best_valid_loss2:.3f}')
 
     model.load_state_dict(torch.load('bert-mnli-matched.pt'))
 
     test_loss, test_acc = evaluate(model, matched_test_it, criterion)
 
-    logging.info(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc * 100:.2f}%')
+    log.info(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc * 100:.2f}%')
 
     model.load_state_dict(torch.load('bert-mnli-mismatched.pt'))
     mis_test_loss, mis_test_acc = evaluate(model, mismatched_test_it, criterion)
 
-    logging.info(f'MIS Test Loss: {mis_test_loss:.3f} |  MIS Test Acc: {mis_test_acc * 100:.2f}%')
+    log.info(f'MIS Test Loss: {mis_test_loss:.3f} |  MIS Test Acc: {mis_test_acc * 100:.2f}%')
 
 
 if __name__ == '__main__':
     # snli_csv_gen()
     # mnli_csv_gen()
-    logging.info('start')
+    log.info('start')
     mnli_bert_exe()
     snli_bert_exe()
 
